@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Legacie Web</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+</head>
+<body class="bg-gray-100 text-gray-900">
+
+    <!-- Sidebar -->
+    <div id="sidebar" class="fixed top-0 left-0 w-64 h-full bg-white shadow-md p-6 flex flex-col">
+        <h2 class="text-xl font-bold mb-6">Admin Panel</h2>
+        <button onclick="fetchAllUsers()" class="bg-blue-500 text-white px-4 py-2 rounded mb-4">Refresh Data</button>
+        <button onclick="showSection('payments')" class="bg-green-500 text-white px-4 py-2 rounded mb-4">Payments</button>
+        <button id="logout-btn" class="bg-red-500 text-white px-4 py-2 rounded">Logout</button>
+        <div class="text-red-500 font-bold mt-4" id="notification-badge">New Requests: 0</div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="ml-72 p-6">
+        <h2 class="text-3xl font-bold">Admin Dashboard</h2>
+        <p class="text-gray-600">Manage all user schedules</p>
+
+        <!-- User Scheduling Section -->
+        <div id="user-list" class="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+
+        <!-- Payments Section -->
+        <div id="payments-section" class="hidden mt-6 p-6 bg-white shadow-lg rounded-lg">
+            <h3 class="text-2xl font-semibold mb-4">User Payments</h3>
+            <p>Coming Soon...</p>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "http://localhost:5000";
+        let adminEmail = localStorage.getItem("adminEmail");
+
+        function checkAdminLogin() {
+            if (!adminEmail) {
+                alert("Admin login required!");
+                window.location.href = "index.html";
+            } else {
+                fetchAllUsers();
+                checkNewRequests();
+            }
+        }
+
+        async function fetchAllUsers() {
+            const response = await fetch(`${API_URL}/api/admin/schedules`);
+            const users = await response.json();
+
+            document.getElementById("user-list").innerHTML = users.map(user => `
+                <div class="bg-white p-4 shadow-md rounded-lg">
+                    <h3 class="text-xl font-bold">${user.fullName}</h3>
+                    <p><strong>Email:</strong> ${user._id}</p>
+                    <p><strong>Phone:</strong> ${user.phone}</p>
+                    <h4 class="text-lg font-semibold mt-4">Schedules</h4>
+                    <div id="schedule-${user._id}" class="mt-2 space-y-2"></div>
+                </div>
+            `).join('');
+
+            users.forEach(user => {
+                fetchUserSchedules(user._id);
+            });
+        }
+
+        async function fetchUserSchedules(email) {
+            const response = await fetch(`${API_URL}/api/schedules/${email}`);
+            const schedules = await response.json();
+
+            document.getElementById(`schedule-${email}`).innerHTML = schedules.map(schedule => `
+                <div class="bg-gray-100 p-3 rounded">
+                    <p><strong>Template:</strong> ${schedule.templateName}</p>
+                    <p><strong>Date:</strong> ${schedule.scheduleDate} at ${schedule.scheduleTime}</p>
+                    <p class="text-blue-500 font-semibold" id="timer-${schedule._id}"></p>
+                    <button onclick="markCompleted('${schedule._id}')" class="bg-green-500 text-white px-4 py-2 rounded mt-2">Complete</button>
+                    <input type="text" id="template-${schedule._id}" placeholder="Assign Template" class="p-2 border rounded mt-2">
+                    <button onclick="assignTemplate('${schedule._id}')" class="bg-blue-500 text-white px-4 py-2 rounded mt-2">Assign</button>
+                </div>
+            `).join('');
+
+            schedules.forEach(schedule => {
+                startCountdown(schedule._id, schedule.scheduleDate, schedule.scheduleTime);
+            });
+        }
+
+        async function checkNewRequests() {
+            const response = await fetch(`${API_URL}/api/admin/new-requests`);
+            const data = await response.json();
+            document.getElementById("notification-badge").textContent = `New Requests: ${data.count}`;
+        }
+
+        async function markCompleted(id) {
+            await fetch(`${API_URL}/api/admin/complete/${id}`, { method: "PUT" });
+            fetchAllUsers();
+        }
+
+        async function assignTemplate(id) {
+            const templateName = document.getElementById(`template-${id}`).value;
+            await fetch(`${API_URL}/api/admin/assign-template/${id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ templateName })
+            });
+            fetchAllUsers();
+        }
+
+        checkAdminLogin();
+    </script>
+
+</body>
+</html>
